@@ -1,6 +1,8 @@
+#! /usr/bin/python3.8
 from selenium import webdriver
-import requests, bs4
+import requests
 import time
+
 '''
 option.add_extension()
 download  Steam Inventory Helper https://www.crx4chrome.com/crx/16732/
@@ -11,12 +13,13 @@ download webdriver for Chrome https://chromedriver.chromium.org/downloads
 
 '''
 
+
 # avtorization
 def start_chrome():
     option = webdriver.ChromeOptions()
-    option.add_extension(r"/home/prizrak/PycharmProjects/python/selenium/extension_1_17_21_0.crx")
+    option.add_extension(r"/home/prizrak/PycharmProjects/python/selenium00/extension_1_17_26_0.crx")
     global driver
-    driver = webdriver.Chrome('/home/prizrak/PycharmProjects/python/selenium/chromedriver', chrome_options=option)
+    driver = webdriver.Chrome('/home/prizrak/PycharmProjects/python/selenium00/chromedriver', options=option)
     driver.get('https://steamcommunity.com/login/home/?goto=')
     name = driver.find_element_by_id("steamAccountName")
     password = driver.find_element_by_id("steamPassword")
@@ -33,26 +36,13 @@ class Pars_Bot:
         self.flot = flot
         self.max_gun = max_gun
 
-    # get text and data from the site csgofloat.com
-    def csgofloat(self, url):
-        try:
-            res = requests.get('https://api.csgofloat.com/?url=' + url)
-            noStarchSoup = bs4.BeautifulSoup(res.text, "html.parser")
-            return str(noStarchSoup)
-        except Exception:
-            print('Not open web-page')
-            return ''
-
-    # find potern and float
+    # find potern and flot
     def analiz(self, sait):
         try:
-            result = self.csgofloat(sait)[13:-2]
-            result = result.split(',')
-            for i in result:
-                if 'floatvalue' in i:
-                    flot = float(i.split(':')[1])
-                if 'paintseed' in i:
-                    potern = int(i.split(':')[1])
+            res = requests.get('https://api.csgofloat.com/?url=' + sait, headers={'Accept': 'application/json'})
+            data = res.json()
+            flot = data['iteminfo']["floatvalue"]
+            potern = data['iteminfo']["paintindex"]
             return [flot, potern]
         except Exception:
             print('Not get flot and potern')
@@ -85,7 +75,7 @@ class Pars_Bot:
             print('You cannot purchase this item because somebody else has already purchased it.')
             driver.find_element_by_xpath("//div[@class='newmodal_close with_label']").click()
 
-    # find the best float and patern
+    # find the best flotof and patern
     def inspekt_elem(self, flot, pot, max_price):
         page = True
         i_page = 1
@@ -102,10 +92,16 @@ class Pars_Bot:
                 time.sleep(5)
                 continue
             for elem in range(len(element)):
-                proanaliz = self.analiz(element[elem].get_attribute('href'))
-                if price[elem] == 'sold':
-                    print(proanaliz[1], "  ", proanaliz[0], ' - price = ', price[elem])
-                elif price[elem] <= max_price:
+                ssilka = element[elem].get_attribute('href')
+                check = old_gun.get(ssilka)
+                if check != None:
+                    proanaliz = [check[0], check[1]]
+                    if price[elem] <= max_price:
+                        print("Old gun", end=" - ")
+                else:
+                    proanaliz = self.analiz(ssilka)
+                    old_gun[ssilka] = [proanaliz[0], proanaliz[1]]
+                if price[elem] <= max_price:
                     if proanaliz[0] < flot or proanaliz[1] in pot:
                         print("naideno: float = ", proanaliz[0], " :  potern = ", proanaliz[1], ' - price = ',
                               price[elem])
@@ -120,16 +116,18 @@ class Pars_Bot:
             # Next page
             if stop == True:
                 driver.refresh()
-                time.sleep(3)
+                time.sleep(2)
                 i_page = 1
                 stop = False
                 continue
             if i_page < 4:
                 driver.find_element_by_xpath("//span[@class='market_paging_pagelink'][" + str(i_page) + "]").click()
                 i_page += 1
+                # print("----------------------Next page--", i_page, "--------------------")
             else:
                 driver.find_element_by_xpath("//span[@class='market_paging_pagelink'][4]").click()
                 i_page += 1
+                # print("----------------------Next page too--", i_page, "-----------------------")
             time.sleep(5)
 
     # low price weapon search
@@ -157,12 +155,16 @@ class Pars_Bot:
 
     def start_parce(self):
         while self.max_gun > 0:
-            price_links_good = self.link_parc_gun(self.url_links)[0]
-            max_price = self.link_parc_gun(self.url_links)[1]
-            print("max_price - ", max_price)
-            for link in price_links_good:
-                driver.get(link)
-                self.inspekt_elem(self.flot, self.pot, max_price)
+            for i in self.url_links:
+                parc_gun = self.link_parc_gun(i)
+                price_links_good = parc_gun[0]
+                max_price = parc_gun[1]
+                print("max_price - ", max_price)
+                for link in price_links_good:
+                    driver.get(link)
+                    self.inspekt_elem(self.flot, self.pot, max_price)
+                if self.max_gun < 1:
+                    break
             print('wait 3 minutes')
             time.sleep(180)
         print('________________Program end________________')
@@ -171,16 +173,51 @@ class Pars_Bot:
 name_steam = ""
 password_steam = ""
 FLOOT = 0.17
-MAX_BUY_GUN = 10
+MAX_BUY_GUN = 100
 POT = []
-url_linkss = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_21&category_730" \
+old_gun = {}
+
+url_linkss1 = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_21&category_730" \
              "_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&category" \
              "_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory2&category_730_Quality%5B%5D=tag" \
              "_normal&category_730_Rarity%5B%5D=tag_Rarity_Mythical_Weapon&appid=730"
+
 # url_linkss = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_21&category_730" \
 #              "_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&category" \
 #              "_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory2&category_730_Quality%5B%5D=tag" \
 #              "_normal&category_730_Rarity%5B%5D=tag_Rarity_Rare_Weapon&appid=730#p1_price_asc"
+
+# url_linkss = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_norse&category_730"\
+#                 "_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&"\
+#                 "category_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory2&category_730_Quality%5B%5"\
+#                 "D=tag_normal&category_730_Rarity%5B%5D=tag_Rarity_Common_Weapon&appid=730"
+
+# ----------------------------The Canals Collection---Minimal Wear------------------------------------------------------
+# url_linkss = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_canals&category_730_ProP"\
+#                 "layer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&category"\
+#                 "_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory1&category_730_Quality%5B%5D=tag_n"\
+#                 "ormal&category_730_Rarity%5B%5D=tag_Rarity_Uncommon_Weapon&appid=730"
+# FLOOT = 0.087
+
+# ----------------------------The CS 20---file test-----------------------------------------------------------------
+url_linkss2 = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_24&category_730"\
+                "_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&cate"\
+                "gory_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory2&category_730_Quality%5B%5D=ta"\
+                "g_normal&category_730_Rarity%5B%5D=tag_Rarity_Mythical_Weapon&appid=730"
+# ----------------------------The CS 20---Minimal Wear-----------------------------------------------------------------
+url_linkss3 = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_24&category_7"\
+                "30_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&c"\
+                "ategory_730_Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory1&category_730_Quality%5B%5"\
+                "D=tag_normal&category_730_Rarity%5B%5D=tag_Rarity_Mythical_Weapon&appid=730"
+# ----------------------------The CS 20---Minimal Wear_ blue-----------------------------------------------------------
+url_linkss4 = "https://steamcommunity.com/market/search?q=&category_730_ItemSet%5B%5D=tag_set_community_24&category_7"\
+    "30_ProPlayer%5B%5D=any&category_730_StickerCapsule%5B%5D=any&category_730_TournamentTeam%5B%5D=any&category_730_"\
+    "Weapon%5B%5D=any&category_730_Exterior%5B%5D=tag_WearCategory1&category_730_Quality%5B%5D=tag_normal&category_73"\
+    "0_Rarity%5B%5D=tag_Rarity_Rare_Weapon&appid=730"
+
+
+
+url_linkss = [url_linkss1]
 
 start_chrome()
 danger_zone_collection = Pars_Bot(url_links=url_linkss, flot=FLOOT, pot=POT, max_gun=MAX_BUY_GUN)
